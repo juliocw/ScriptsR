@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Modelos de crescimento em altura dominante</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Julio Wojciechowski" />
+    <meta name="date" content="2023-04-15" />
+    <script src="libs/header-attrs-2.21/header-attrs.js"></script>
+    <script src="libs/kePrint-0.0.1/kePrint.js"></script>
+    <link href="libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
+    <link rel="stylesheet" href="xaringan-themer.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# Modelos de crescimento em altura dominante
+]
+.subtitle[
+## Ajuste de modelos Hdom
+]
+.author[
+### Julio Wojciechowski
+]
+.institute[
+### UNEMAT
+]
+.date[
+### 2023-04-15
+]
+
+---
+
+### 1 Contextualização
+
+O banco de dados analisado traz os resultados de um experimento realizado em 813 parcelas de `\(600 m^2\)` de *Pinus taeda* onde foram avaliados o número de árvores/ha, DAP, h, G, volume total/ha e hdom, onde desejamos **ajustar e avaliar modelos de crescimento em altura dominante** do povoamento.
+
+
+--
+
+### 2 Carregamento dos pacotes
+
+```r
+library(dplyr)                                
+library(car)                                
+library(rstatix)                                
+library(emmeans)
+library(ggplot2)
+library(kableExtra)
+library(htmltools)
+library(minpack.lm)
+library(egg)
+library(tibble)
+library(purrr)
+library(stringr)
+```
+
+---
+
+### 3 Leitura dos dados
+
+```r
+dados &lt;- read.csv2("https://raw.githubusercontent.com/juliocw/ScriptsR/main/Mensuracao/BD1MFP.csv", head = T, dec = ".")
+str(dados)
+```
+
+```
+## 'data.frame':	813 obs. of  8 variables:
+##  $ PARCELA: int  1 2 3 4 5 6 7 8 9 10 ...
+##  $ IDADE  : num  19.8 19.8 24.2 24.2 24.2 24.2 24.2 24.2 24.2 24.2 ...
+##  $ DAP    : num  24.1 25.1 28 30.3 32 30.7 30.8 30 30.4 28.2 ...
+##  $ ALTURA : num  23.6 24 26.6 25.9 27.9 27.4 25.3 26.2 26.4 26.4 ...
+##  $ N      : num  927 748 700 600 600 ...
+##  $ HDOM   : num  25.5 25.6 26.3 29.9 31.3 29.5 27.2 30.3 31.1 29.2 ...
+##  $ G      : num  44.5 38.1 44.6 44.9 49.4 50.1 44.5 46.7 47.2 40.1 ...
+##  $ VOLTOT : num  509 436 563 551 655 ...
+```
+
+---
+
+### 4 Visualização dos dados
+
+
+```r
+kable(head(dados, 10)) %&gt;%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+&lt;table class="table table-striped table-hover table-condensed table-responsive" style="width: auto !important; margin-left: auto; margin-right: auto;"&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:right;"&gt; PARCELA &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; IDADE &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; DAP &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; ALTURA &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; N &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; HDOM &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; G &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; VOLTOT &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 927.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 44.5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 509.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 748.5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 38.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 435.9 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 28.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 700.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 44.6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 563.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 599.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 44.9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 550.8 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 600.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 49.4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 654.8 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.7 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 650.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 50.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 657.3 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 7 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 583.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 44.5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 532.4 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 639.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 46.7 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 579.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 633.3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 47.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 593.9 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:right;"&gt; 10 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 28.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 619.8 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.2 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 40.1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 506.7 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+.left-column[
+
+### 5 Gráfico: Idade x Hdom
+
+]
+
+.right-column[
+
+
+```r
+plot(HDOM~IDADE, data = dados,
+     xlim = c(0,30), ylim = c(0,35),
+     xlab = 'Idade (anos)', ylab = 'Hdom (m)')
+```
+
+![](Slideshow_modelosHdom_files/figure-html/unnamed-chunk-1-1.png)&lt;!-- --&gt;
+
+]
+
+---
+
+### 6 Modelos de Altura dominante
+
+Nosso trabalho agora será ajustar diversos modelos e avaliar qual deles melhor representa os dados em questão. Testaremos os seguintes modelos abaixo: 
+
+Autor               |  Modelo
+:------------       | :------
+Chapman-Richards:   | `\(Hdom = \beta_0(1-exp^{\beta_1*Idade})^{\beta_2}\)`
+Lundvist-Korf:      | `\(Hdom =\beta_0*exp^{-\beta_1\left(\frac{1}{Idade^\beta2}\right)}\)`
+Bailey-3 parâmtros: | `\(Hdom = \beta_0(1-exp^{\beta_1*Idade^\beta2})\)`
+Clutter-Jones:      | `\(Hdom = \beta_0(1+\beta_1*Idade^{\beta_2})^{\beta_3}\)`
+
+---
+
+### 7 Ajuste dos modelos de Hdom
+
+Para o ajuste dos modelos utilizaremos a função `nlsLM` do pacote `minpack.lm`. A diferença entre esta e a função `nls` é o algoritmo de busca dos parâmetros. A função `nlsLM` utiliza o algoritmo Levenberg-Marquardt que é mais eficiente que o Gauss-Newton utilizado pela `nls`, especialmente quando não temos referências iniciais para declarar ao argumento `start`, e/ou quando buscamos ajustar modelos com maior quantidade de parâmetros.
+
+--
+
+#### Uso da função `nlsM`
+
+```r
+chapman_richards &lt;- nlsLM(HDOM ~ b0*(1-exp(-b1*IDADE))^b2,
+                      start=list(b0=30,b1=0.5,b2=1), control = nls.control(maxiter = 1024),
+                      data = dados)
+lundqvist_korf &lt;- nlsLM(HDOM ~ b0*exp(-b1*(1/(IDADE^b2))),
+                      start = list(b0=40,b1=5,b2=0.5), control = nls.control(maxiter = 1024),
+                      data = dados)
+bailey_3p &lt;- nlsLM(HDOM ~ b0*(1-exp(-b1*IDADE^b2)),
+                      start = list(b0=24,b1=0.05, b2=1.5), control = nls.control(maxiter = 1024),
+                      data = dados)
+clutter_jones = nlsLM(HDOM ~ b0*(1+b1*IDADE^b2)^b3,
+                      start=list(b0=25,b1=-0.2, b2=-0.1, b3=20), control = nls.control(maxiter = 1024),
+                      data = dados)
+```
+
+---
+
+### 8 Armazenar modelos em uma lista e exibir os coeficientes ajustados
+
+
+```r
+modelos12 &lt;- mget(c('chapman_richards', 'lundqvist_korf'), envir = globalenv())
+modelos34 &lt;- mget(c('bailey_3p', 'clutter_jones'), envir = globalenv())
+```
+
+--
+
+```r
+lapply(modelos12, coefficients)
+```
+
+```
+## $chapman_richards
+##         b0         b1         b2 
+## 29.4736917  0.1091331  1.1873044 
+## 
+## $lundqvist_korf
+##         b0         b1         b2 
+## 39.2667250  5.1785323  0.8290405
+```
+
+```r
+lapply(modelos34, coefficients)
+```
+
+```
+## $bailey_3p
+##          b0          b1          b2 
+## 29.43101745  0.07767752  1.09057720 
+## 
+## $clutter_jones
+##         b0         b1         b2         b3 
+## 40.2589404 -0.4158863 -0.7719502 10.8685052
+```
+
+---
+
+.left-column[
+
+### 9 Gráficos
+
+]
+
+.right-column[
+
+A seguir vamos gerar os gráficos da curva de ajuste, de dispersão e de distribuição de resíduos em classes de erro. Em vez de criarmos todos os gráficos um a um, apresentaremos a lista de modelos a uma função que gera os três gráficos para cada elemento da lista.
+
+]
+
+---
+##### Função que gera os gráficos:
+
+```r
+idmax = 25 ## Idade máxima de predição
+graficos1 = syms(names(modelos12)) %&gt;% set_names() %&gt;% # Função para gerar análise gráfica
+  imap(function(modelo, nome_modelo) {
+    modelo = eval(modelo) # Obter o modelo
+    nome_modelo = str_to_title(gsub("_", "-", nome_modelo))  # Formatar nome do modelo
+    dados_ajuste = eval(modelo$data)  # Criar os dados para predição
+    dados_predicao = tibble(IDADE = seq(0, idmax, 0.1))
+    dados_predicao$HDOM = predict(modelo, newdata=dados_predicao)
+    list(curva_ajuste = ggplot(dados_predicao, aes(IDADE, HDOM)) + # Listar gráficos
+        geom_line() + geom_point(data=dados_ajuste, alpha=0.2) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01)), breaks = seq(0,idmax,2)) +
+        scale_y_continuous(expand=c(0,0)) + labs(x='Idade (anos)', y='Hdom (m)',
+        title = paste0(nome_modelo,' - Syx = ', round(summary(modelo)$sigma, 2)))+theme_light(),
+dispersao_residuos = ggplot(tibble(x=dados_ajuste$IDADE, y=residuals(modelo)/mean(x)*100)) +
+        geom_point(alpha=0.2, aes(x, y)) + geom_hline(yintercept=0) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01))) +
+        scale_y_continuous(expand=c(0,0), limits = c(-50,50)) +
+        labs(x='Idade (anos)', y='Desvio (%)')+
+        geom_line(stat = 'smooth', method = 'loess', aes(x, y), color = 'red', alpha = .8,
+        size = 1, linetype ="dashed",)+theme_light(),
+distribuicao_residuos = ggplot(tibble(x=residuals(modelo)/mean(dados_ajuste$HDOM)*100)) +
+        geom_histogram(aes(x, y=..count../nrow(dados_ajuste)*100), breaks=seq(-27.5,27.5,by=5),
+        colour='black')+labs(x='Classe',y='Frequência(%)')+scale_y_continuous(limits=c(0,30))+theme_light()
+    )
+  })
+```
+
+---
+##### Função que gera os gráficos:
+
+```r
+idmax = 25 ## Idade máxima de predição
+graficos2 = syms(names(modelos34)) %&gt;% set_names() %&gt;% # Função para gerar análise gráfica
+  imap(function(modelo, nome_modelo) {
+    modelo = eval(modelo) # Obter o modelo
+    nome_modelo = str_to_title(gsub("_", "-", nome_modelo))  # Formatar nome do modelo
+    dados_ajuste = eval(modelo$data)  # Criar os dados para predição
+    dados_predicao = tibble(IDADE = seq(0, idmax, 0.1))
+    dados_predicao$HDOM = predict(modelo, newdata=dados_predicao)
+    list(curva_ajuste = ggplot(dados_predicao, aes(IDADE, HDOM)) + # Listar gráficos
+        geom_line() + geom_point(data=dados_ajuste, alpha=0.2) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01)), breaks = seq(0,idmax,2)) +
+        scale_y_continuous(expand=c(0,0)) + labs(x='Idade (anos)', y='Hdom (m)',
+        title = paste0(nome_modelo,' - Syx = ', round(summary(modelo)$sigma, 2)))+theme_light(),
+dispersao_residuos = ggplot(tibble(x=dados_ajuste$IDADE, y=residuals(modelo)/mean(x)*100)) +
+        geom_point(alpha=0.2, aes(x, y)) + geom_hline(yintercept=0) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01))) +
+        scale_y_continuous(expand=c(0,0), limits = c(-50,50)) +
+        labs(x='Idade (anos)', y='Desvio (%)')+
+        geom_line(stat = 'smooth', method = 'loess', aes(x, y), color = 'red', alpha = .8,
+        size = 1, linetype ="dashed",)+theme_light(),
+distribuicao_residuos = ggplot(tibble(x=residuals(modelo)/mean(dados_ajuste$HDOM)*100)) +
+        geom_histogram(aes(x, y=..count../nrow(dados_ajuste)*100), breaks=seq(-27.5,27.5,by=5),
+        colour='black')+labs(x='Classe',y='Frequência(%)')+scale_y_continuous(limits=c(0,30))+theme_light()
+    )
+  })
+```
+
+---
+### 10 Plotagem dos gráficos
+
+
+```r
+map(graficos1, ~ggarrange(plots=.x, ncol=3 , draw=FALSE)) %&gt;% grid.arrange(grobs=.,ncol=1)
+```
+
+![](Slideshow_modelosHdom_files/figure-html/unnamed-chunk-7-1.png)&lt;!-- --&gt;
+
+---
+### 10 Plotagem dos gráficos
+
+
+```r
+map(graficos2, ~ggarrange(plots=.x, ncol=3 , draw=FALSE)) %&gt;% grid.arrange(grobs=.,ncol=1)
+```
+
+![](Slideshow_modelosHdom_files/figure-html/unnamed-chunk-8-1.png)&lt;!-- --&gt;
+---
+
+### 11 Conclusão
+
+* Os quatro modelos tiveram desempenho bastante similar para os gráficos de resíduos e para o erro padrão das estimativas. No entanto, há uma diferença considerável nas assíntotas (coeficiente b0) e nas predições de altura dominante para idades inferiores a 3 anos. Os modelos de Lundqvist-Korf e Clutter-Jones sugerem que no futuro as árvores dominantes alcançarão em média os 40 metros de altura, enquanto os modelos de Chapman-Richards e Bailey-3p indicam que a assíntota se dá em torno de 30 metros. Esta é uma questão pouco relevante se considerarmos que neste caso os povoamentos serão submetidos a corte raso entre os 14 e os 16 anos, e que nesta faixa de idade temos uma quantidade suficiente de amostras.
+
+* Por outro lado, as curvas geradas por esses pares de modelos também apresentam comportamento divergente para idades inferiores a 4 anos, em que não há observações. Neste caso os modelos de Lundqvist-Korf e Clutter-Jones sugerem que povoamentos com 1 ano de idade possuem altura dominante igual a zero, o que é bastante equivocado do ponto de vista biológico. 
+
+---
+
+### 11 Conclusão
+
+* O problema na utilização destes modelos se daria se, por alguma razão, houvesse a necessidade de predizer o sítio em povoamentos cuja idade no momento do inventário é inferior a 3 anos. Em todos os casos não temos observações para representar o crescimento em idades inferiores a 4 anos, mas o bom senso, a experiência e a lógica são suficientes para nos garantir que povoamentos com um ano de idade já possuem algum crescimento em altura.
+  
+* Então, para concluir, já que os modelos apresentaram grande similiaridade entre si para as análises de resíduos, eu escolheria o modelo de Chapman-Richards ou Bailey-3p para representar o crescimento em altura dominante deste povoamento, tomando por base o comportamento biológico esperado.
+
+
+&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;
+
+
+Fim.
+
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="libs/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"slideNumberFormat": "%current%",
+"highlightStyle": "github",
+"highlightLines": true,
+"ratio": "16:9",
+"countIncrementalSlides": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

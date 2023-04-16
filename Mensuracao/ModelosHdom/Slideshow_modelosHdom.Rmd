@@ -1,0 +1,241 @@
+---
+title: "Modelos de crescimento em altura dominante"
+subtitle: "Ajuste de modelos Hdom"  
+author: 
+  - "Julio Wojciechowski"
+institute: UNEMAT
+date: '`r Sys.Date()`'
+encoding: "UTF-8"
+output:
+  xaringan::moon_reader:
+    chakra: libs/remark-latest.min.js  
+    lib_dir: libs
+    css: xaringan-themer.css
+    nature:
+      slideNumberFormat: "%current%"
+      highlightStyle: github
+      highlightLines: true
+      ratio: 16:9
+      countIncrementalSlides: true
+---
+### 1 Contextualização
+
+O banco de dados analisado traz os resultados de um experimento realizado em 813 parcelas de $600 m^2$ de *Pinus taeda* onde foram avaliados o número de árvores/ha, DAP, h, G, volume total/ha e hdom, onde desejamos **ajustar e avaliar modelos de crescimento em altura dominante** do povoamento.
+
+
+--
+
+### 2 Carregamento dos pacotes
+```{r Pacotes, message=FALSE, warning=FALSE}
+library(dplyr)                                
+library(car)                                
+library(rstatix)                                
+library(emmeans)
+library(ggplot2)
+library(kableExtra)
+library(htmltools)
+library(minpack.lm)
+library(egg)
+library(tibble)
+library(purrr)
+library(stringr)
+```
+
+---
+
+### 3 Leitura dos dados
+```{r Leitura e tipos de variáveis}
+dados <- read.csv2("https://raw.githubusercontent.com/juliocw/ScriptsR/main/Mensuracao/BD1MFP.csv", head = T, dec = ".")
+str(dados)
+```
+
+---
+
+### 4 Visualização dos dados
+
+```{r Visualização banco}
+kable(head(dados, 10)) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+---
+
+.left-column[
+
+### 5 Gráfico: Idade x Hdom
+
+]
+
+.right-column[
+
+```{r}
+plot(HDOM~IDADE, data = dados,
+     xlim = c(0,30), ylim = c(0,35),
+     xlab = 'Idade (anos)', ylab = 'Hdom (m)')
+```
+
+]
+
+---
+
+### 6 Modelos de Altura dominante
+
+Nosso trabalho agora será ajustar diversos modelos e avaliar qual deles melhor representa os dados em questão. Testaremos os seguintes modelos abaixo: 
+
+Autor               |  Modelo
+:------------       | :------
+Chapman-Richards:   | $Hdom = \beta_0(1-exp^{\beta_1*Idade})^{\beta_2}$
+Lundvist-Korf:      | $Hdom =\beta_0*exp^{-\beta_1\left(\frac{1}{Idade^\beta2}\right)}$
+Bailey-3 parâmtros: | $Hdom = \beta_0(1-exp^{\beta_1*Idade^\beta2})$
+Clutter-Jones:      | $Hdom = \beta_0(1+\beta_1*Idade^{\beta_2})^{\beta_3}$
+
+---
+
+### 7 Ajuste dos modelos de Hdom
+
+Para o ajuste dos modelos utilizaremos a função `nlsLM` do pacote `minpack.lm`. A diferença entre esta e a função `nls` é o algoritmo de busca dos parâmetros. A função `nlsLM` utiliza o algoritmo Levenberg-Marquardt que é mais eficiente que o Gauss-Newton utilizado pela `nls`, especialmente quando não temos referências iniciais para declarar ao argumento `start`, e/ou quando buscamos ajustar modelos com maior quantidade de parâmetros.
+
+--
+
+#### Uso da função `nlsM`
+```{r}
+chapman_richards <- nlsLM(HDOM ~ b0*(1-exp(-b1*IDADE))^b2,
+                      start=list(b0=30,b1=0.5,b2=1), control = nls.control(maxiter = 1024),
+                      data = dados)
+lundqvist_korf <- nlsLM(HDOM ~ b0*exp(-b1*(1/(IDADE^b2))),
+                      start = list(b0=40,b1=5,b2=0.5), control = nls.control(maxiter = 1024),
+                      data = dados)
+bailey_3p <- nlsLM(HDOM ~ b0*(1-exp(-b1*IDADE^b2)),
+                      start = list(b0=24,b1=0.05, b2=1.5), control = nls.control(maxiter = 1024),
+                      data = dados)
+clutter_jones = nlsLM(HDOM ~ b0*(1+b1*IDADE^b2)^b3,
+                      start=list(b0=25,b1=-0.2, b2=-0.1, b3=20), control = nls.control(maxiter = 1024),
+                      data = dados)
+```
+
+---
+
+### 8 Armazenar modelos em uma lista e exibir os coeficientes ajustados
+
+```{r}
+modelos12 <- mget(c('chapman_richards', 'lundqvist_korf'), envir = globalenv())
+modelos34 <- mget(c('bailey_3p', 'clutter_jones'), envir = globalenv())
+```
+
+--
+```{r}
+lapply(modelos12, coefficients)
+lapply(modelos34, coefficients)
+```
+
+---
+
+.left-column[
+
+### 9 Gráficos
+
+]
+
+.right-column[
+
+A seguir vamos gerar os gráficos da curva de ajuste, de dispersão e de distribuição de resíduos em classes de erro. Em vez de criarmos todos os gráficos um a um, apresentaremos a lista de modelos a uma função que gera os três gráficos para cada elemento da lista.
+
+]
+
+---
+##### Função que gera os gráficos:
+```{r, echo=T, warning=FALSE}
+idmax = 25 ## Idade máxima de predição
+graficos1 = syms(names(modelos12)) %>% set_names() %>% # Função para gerar análise gráfica
+  imap(function(modelo, nome_modelo) {
+    modelo = eval(modelo) # Obter o modelo
+    nome_modelo = str_to_title(gsub("_", "-", nome_modelo))  # Formatar nome do modelo
+    dados_ajuste = eval(modelo$data)  # Criar os dados para predição
+    dados_predicao = tibble(IDADE = seq(0, idmax, 0.1))
+    dados_predicao$HDOM = predict(modelo, newdata=dados_predicao)
+    list(curva_ajuste = ggplot(dados_predicao, aes(IDADE, HDOM)) + # Listar gráficos
+        geom_line() + geom_point(data=dados_ajuste, alpha=0.2) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01)), breaks = seq(0,idmax,2)) +
+        scale_y_continuous(expand=c(0,0)) + labs(x='Idade (anos)', y='Hdom (m)',
+        title = paste0(nome_modelo,' - Syx = ', round(summary(modelo)$sigma, 2)))+theme_light(),
+dispersao_residuos = ggplot(tibble(x=dados_ajuste$IDADE, y=residuals(modelo)/mean(x)*100)) +
+        geom_point(alpha=0.2, aes(x, y)) + geom_hline(yintercept=0) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01))) +
+        scale_y_continuous(expand=c(0,0), limits = c(-50,50)) +
+        labs(x='Idade (anos)', y='Desvio (%)')+
+        geom_line(stat = 'smooth', method = 'loess', aes(x, y), color = 'red', alpha = .8,
+        size = 1, linetype ="dashed",)+theme_light(),
+distribuicao_residuos = ggplot(tibble(x=residuals(modelo)/mean(dados_ajuste$HDOM)*100)) +
+        geom_histogram(aes(x, y=..count../nrow(dados_ajuste)*100), breaks=seq(-27.5,27.5,by=5),
+        colour='black')+labs(x='Classe',y='Frequência(%)')+scale_y_continuous(limits=c(0,30))+theme_light()
+    )
+  })
+```
+
+---
+##### Função que gera os gráficos:
+```{r, echo=T, warning=FALSE}
+idmax = 25 ## Idade máxima de predição
+graficos2 = syms(names(modelos34)) %>% set_names() %>% # Função para gerar análise gráfica
+  imap(function(modelo, nome_modelo) {
+    modelo = eval(modelo) # Obter o modelo
+    nome_modelo = str_to_title(gsub("_", "-", nome_modelo))  # Formatar nome do modelo
+    dados_ajuste = eval(modelo$data)  # Criar os dados para predição
+    dados_predicao = tibble(IDADE = seq(0, idmax, 0.1))
+    dados_predicao$HDOM = predict(modelo, newdata=dados_predicao)
+    list(curva_ajuste = ggplot(dados_predicao, aes(IDADE, HDOM)) + # Listar gráficos
+        geom_line() + geom_point(data=dados_ajuste, alpha=0.2) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01)), breaks = seq(0,idmax,2)) +
+        scale_y_continuous(expand=c(0,0)) + labs(x='Idade (anos)', y='Hdom (m)',
+        title = paste0(nome_modelo,' - Syx = ', round(summary(modelo)$sigma, 2)))+theme_light(),
+dispersao_residuos = ggplot(tibble(x=dados_ajuste$IDADE, y=residuals(modelo)/mean(x)*100)) +
+        geom_point(alpha=0.2, aes(x, y)) + geom_hline(yintercept=0) +
+        scale_x_continuous(expand=expand_scale(mult=c(0,0.01))) +
+        scale_y_continuous(expand=c(0,0), limits = c(-50,50)) +
+        labs(x='Idade (anos)', y='Desvio (%)')+
+        geom_line(stat = 'smooth', method = 'loess', aes(x, y), color = 'red', alpha = .8,
+        size = 1, linetype ="dashed",)+theme_light(),
+distribuicao_residuos = ggplot(tibble(x=residuals(modelo)/mean(dados_ajuste$HDOM)*100)) +
+        geom_histogram(aes(x, y=..count../nrow(dados_ajuste)*100), breaks=seq(-27.5,27.5,by=5),
+        colour='black')+labs(x='Classe',y='Frequência(%)')+scale_y_continuous(limits=c(0,30))+theme_light()
+    )
+  })
+```
+
+---
+### 10 Plotagem dos gráficos
+
+```{r, echo=T, warning=FALSE, message=FALSE, fig.dim=c(14,6)}
+map(graficos1, ~ggarrange(plots=.x, ncol=3 , draw=FALSE)) %>% grid.arrange(grobs=.,ncol=1)
+```
+
+---
+### 10 Plotagem dos gráficos
+
+```{r, echo=T, warning=FALSE, message=FALSE, fig.dim=c(14,6)}
+map(graficos2, ~ggarrange(plots=.x, ncol=3 , draw=FALSE)) %>% grid.arrange(grobs=.,ncol=1)
+```
+---
+
+### 11 Conclusão
+
+* Os quatro modelos tiveram desempenho bastante similar para os gráficos de resíduos e para o erro padrão das estimativas. No entanto, há uma diferença considerável nas assíntotas (coeficiente b0) e nas predições de altura dominante para idades inferiores a 3 anos. Os modelos de Lundqvist-Korf e Clutter-Jones sugerem que no futuro as árvores dominantes alcançarão em média os 40 metros de altura, enquanto os modelos de Chapman-Richards e Bailey-3p indicam que a assíntota se dá em torno de 30 metros. Esta é uma questão pouco relevante se considerarmos que neste caso os povoamentos serão submetidos a corte raso entre os 14 e os 16 anos, e que nesta faixa de idade temos uma quantidade suficiente de amostras.
+
+* Por outro lado, as curvas geradas por esses pares de modelos também apresentam comportamento divergente para idades inferiores a 4 anos, em que não há observações. Neste caso os modelos de Lundqvist-Korf e Clutter-Jones sugerem que povoamentos com 1 ano de idade possuem altura dominante igual a zero, o que é bastante equivocado do ponto de vista biológico. 
+
+---
+
+### 11 Conclusão
+
+* O problema na utilização destes modelos se daria se, por alguma razão, houvesse a necessidade de predizer o sítio em povoamentos cuja idade no momento do inventário é inferior a 3 anos. Em todos os casos não temos observações para representar o crescimento em idades inferiores a 4 anos, mas o bom senso, a experiência e a lógica são suficientes para nos garantir que povoamentos com um ano de idade já possuem algum crescimento em altura.
+  
+* Então, para concluir, já que os modelos apresentaram grande similiaridade entre si para as análises de resíduos, eu escolheria o modelo de Chapman-Richards ou Bailey-3p para representar o crescimento em altura dominante deste povoamento, tomando por base o comportamento biológico esperado.
+
+
+<br><br><br><br><br><br><br><br>
+
+
+Fim.
+
+
